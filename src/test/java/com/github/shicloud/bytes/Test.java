@@ -23,7 +23,8 @@ public class Test {
 		msg = ByteUtil.appendBytes(msg, "hello".getBytes());
 		msg = ByteUtil.appendBytes(msg, ByteUtil.longToBytes(new Date().getTime()));
 		msg = ByteUtil.appendBytes(msg, new byte[] {ByteUtil.boolTobyte(1)});
-		msg = ByteUtil.appendBytes(msg, ByteUtil.shortToBytes(Short.valueOf("0")));
+		msg = ByteUtil.appendBytes(msg, new byte[] {Byte.valueOf("0")});
+		msg = ByteUtil.appendBytes(msg, "1234567890".getBytes());
 		logger.info(ByteUtil.byteToSplitStr(msg));
 		User u = ByteParser.toObject(msg, User.class);
 		logger.info("Id:"+u.getId());
@@ -34,13 +35,15 @@ public class Test {
 		logger.info("CreateTime:"+u.getCreateTime());
 		logger.info("IsMale:"+u.getIsMale());
 		logger.info("IsDel:"+u.getIsDel());
+		logger.info("Descrption:"+ByteUtil.byteToStr(u.getDescrption()));
 		
 		u.setId(1000L);
 		u.setCreateTime(new Date());
 		u.setIsDel(Byte.valueOf("1"));
-		byte[] u2 = ByteParser.toBytes(u);
-		logger.info(ByteUtil.byteToSplitStr(u2));
-		ByteParser.toObject(u2, User.class);
+		u.setDescrption("0987654321".getBytes());
+		byte[] b = ByteParser.toBytes(u);
+		logger.info(ByteUtil.byteToSplitStr(b));
+		ByteParser.toObject(b, User.class);
 		logger.info("Id:"+u.getId());
 		logger.info("Age:"+u.getAge());
 		logger.info("Weight:"+u.getWeight());
@@ -49,5 +52,6 @@ public class Test {
 		logger.info("CreateTime:"+u.getCreateTime());
 		logger.info("IsMale:"+u.getIsMale());
 		logger.info("IsDel:"+u.getIsDel());
+		logger.info("Descrption:"+ByteUtil.byteToStr(u.getDescrption()));
 	}
 }

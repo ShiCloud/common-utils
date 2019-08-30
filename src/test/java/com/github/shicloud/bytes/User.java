@@ -20,13 +20,13 @@ public class User {
 	private Double salary;
 	
 	@Parser(index = 5, lenght = 2)
-	//@IgnoreToBytes
 	private Integer loginLength;
 	
 	@Parser(index = 6, dependsOn = 5)
 	private String login;
 	
 	@Parser(index = 7, lenght = 8)
+	//@IgnoreToBytes
 	@IgnoreToObject
 	private Date createTime;
 	
@@ -35,6 +35,9 @@ public class User {
 	
 	@Parser(index = 9, lenght = 1)
 	private Byte isDel;
+	
+	@Parser(index = 10, lenght = 10)
+	private byte[] descrption;
 
 	public Long getId() {
 		return id;
@@ -106,6 +109,14 @@ public class User {
 
 	public void setIsDel(Byte isDel) {
 		this.isDel = isDel;
+	}
+
+	public byte[] getDescrption() {
+		return descrption;
+	}
+
+	public void setDescrption(byte[] descrption) {
+		this.descrption = descrption;
 	}
 
 }

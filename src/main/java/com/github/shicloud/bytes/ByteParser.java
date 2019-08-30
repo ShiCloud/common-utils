@@ -40,11 +40,6 @@ public class ByteParser {
 		for (Object[] parserAndField : objMap.values()) {
 			Parser parser = (Parser) parserAndField[0];
 			Field field = (Field) parserAndField[1];
-			
-			if(field.getAnnotation(IgnoreToObject.class)!=null) {
-				continue;
-			}
-			
 			String fieldName = field.getName();
 			Method setter = null;
 			Method dependsOnGetter = null;
@@ -70,8 +65,12 @@ public class ByteParser {
 			try {
 				
 				int fieldLength = dependsOnGetter != null ? (int) dependsOnGetter.invoke(obj) : parser.lenght();
+				if(field.getAnnotation(IgnoreToObject.class)!=null) {
+					index += (fieldLength + parser.offset());
+					continue;
+				}
+				
 				byte[] b = ByteUtil.subBytes(bytes, index + parser.offset(), fieldLength);
-
 				if (field.getType() == Byte.class) {
 					setter.invoke(obj, Byte.valueOf(b[0]));
 				} else if (field.getType() == Boolean.class) {
@@ -90,6 +89,11 @@ public class ByteParser {
 					setter.invoke(obj, ByteUtil.byteToStr(b));
 				} else if (field.getType() == Date.class) {
 					setter.invoke(obj, new Date(ByteUtil.bytesToLong(b)));
+				} else if (field.getType() == byte[].class) {
+					setter.invoke(obj, b);
+				} else {
+					logger.error(fieldName + " unsupport data type " + field.getType());
+					return null;
 				}
 
 				index += (fieldLength + parser.offset());
@@ -105,6 +109,7 @@ public class ByteParser {
 		Map<Integer, Object[]> objMap = getObjectMap(obj);
 		byte[] bytes = new byte[0];
 		for (Object[] parserAndField : objMap.values()) {
+			Parser parser = (Parser) parserAndField[0];
 			Field field = (Field) parserAndField[1];
 			if(field.getAnnotation(IgnoreToBytes.class)!=null) {
 				continue;
@@ -112,7 +117,6 @@ public class ByteParser {
 			
 			try {
 				Method getter = ReflectUtil.getGetter(obj, field.getName());
-				Parser parser = (Parser) parserAndField[0];
 				if(parser.offset()>0) {
 					bytes = ByteUtil.appendBytes(bytes, new byte[parser.offset()]);
 				}
@@ -137,6 +141,11 @@ public class ByteParser {
 					lenght = b.length;
 				} else if (field.getType() == Date.class) {
 					b = ByteUtil.longToBytes(((Date)getter.invoke(obj)).getTime());
+				} else if (field.getType() == byte[].class) {
+					b = (byte[])getter.invoke(obj);
+				} else {
+					logger.error(field.getName() + " unsupport data type " + field.getType());
+					return null;
 				}
 				
 				if(b.length > lenght) {
