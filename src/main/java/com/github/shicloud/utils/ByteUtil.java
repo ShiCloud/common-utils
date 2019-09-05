@@ -27,22 +27,6 @@ public class ByteUtil {
 	    return bytes;
 	}
 	
-	/**
-	 * 
-	 * 从指定数组的copy一个子数组并返回
-	 *
-	 * 
-	 * 
-	 * @param org
-	 *            of type byte[] 原数组
-	 * 
-	 * @param append
-	 *            合并一个byte[]
-	 * 
-	 * @return 合并的数据
-	 * 
-	 */
-
 	public static byte[] appendBytes(byte[] org, byte[] append) {
 
 		byte[] newByte = new byte[org.length + append.length];
@@ -79,7 +63,7 @@ public class ByteUtil {
 	 * @param src
 	 * @param begin
 	 * @param count
-	 * @return
+	 * @return byte[]
 	 */
 	public static byte[] subBytes(byte[] src, int begin, int count) {
 		byte[] b = new byte[count];
@@ -132,11 +116,6 @@ public class ByteUtil {
 		System.out.println();
 	}	
 	
-	/**
-	 * @功能: BCD码转为10进制串(阿拉伯数据)
-	 * @参数: BCD码
-	 * @结果: 10进制串
-	 */
 	public static String bcdToStr(byte[] bytes) {
 		StringBuffer temp = new StringBuffer(bytes.length * 2);
 		for (int i = 0; i < bytes.length; i++) {
@@ -146,11 +125,6 @@ public class ByteUtil {
 		return temp.toString().substring(0, 1).equalsIgnoreCase("0") ? temp.toString().substring(1) : temp.toString();
 	}
 
-	/**
-	 * @功能: 10进制串转为BCD码
-	 * @参数: 10进制串
-	 * @结果: BCD码
-	 */
 	public static byte[] strToBcd(String asc) {
 		int len = asc.length();
 		int mod = len % 2;
@@ -301,13 +275,6 @@ public class ByteUtil {
 		return buffer.array();
 	}
 
-	/**
-	 * 字符串转换成十六进制字符串
-	 * 
-	 * @param String
-	 *            str 待转换的ASCII字符串
-	 * @return String 每个Byte之间空格分隔，如: [61 6C 6B]
-	 */
 	public static String strToHexStr(String str) {
 
 		char[] chars = "0123456789ABCDEF".toCharArray();
@@ -325,13 +292,6 @@ public class ByteUtil {
 		return sb.toString().trim();
 	}
 
-	/**
-	 * 十六进制转换字符串
-	 * 
-	 * @param String
-	 *            str Byte字符串(Byte之间无分隔符 如:[616C6B])
-	 * @return String 对应的字符串
-	 */
 	public static String hexStrToStr(String hexStr) {
 		String str = "0123456789ABCDEF";
 		char[] hexs = hexStr.toCharArray();
@@ -346,23 +306,10 @@ public class ByteUtil {
 		return new String(bytes);
 	}
 	
-	/**
-	 * byte转换字符串
-	 * 
-	 * @param byte[]
-	 * @return String 对应的字符串
-	 */
 	public static String byteToStr(byte[] b) {
 		return ByteUtil.hexStrToStr(ByteUtil.byteToHexStr(b));
 	}
 
-	/**
-	 * bytes转换成十六进制字符串
-	 * 
-	 * @param byte[]
-	 *            b byte数组
-	 * @return String 每个Byte值之间空格分隔
-	 */
 	public static String byteToHexStr(byte[] b) {
 		String stmp = "";
 		StringBuilder sb = new StringBuilder("");
@@ -373,13 +320,7 @@ public class ByteUtil {
 		}
 		return sb.toString().toUpperCase().trim();
 	}
-	/**
-	 * bytes转换成十六进制字符串
-	 * 
-	 * @param byte[]
-	 *            b byte数组
-	 * @return String 每个Byte值之间空格分隔
-	 */
+
 	public static String byteToSplitStr(byte[] b) {
 		StringBuilder sb = new StringBuilder("");
 		for (int n = 0; n < b.length; n++) {
@@ -388,13 +329,7 @@ public class ByteUtil {
 		}
 		return sb.toString().substring(0, sb.length()-1);
 	}
-	/**
-	 *  hexStr字符串转换为Byte值
-	 * 
-	 * @param String
-	 *            src Byte字符串，每个Byte之间没有分隔符
-	 * @return byte[]
-	 */
+
 	public static byte[] hexStrToBytes(String src) {
 		int len = src.length() / 2;
         byte[] result = new byte[len];
@@ -404,14 +339,6 @@ public class ByteUtil {
         return result;
 	}
 
-	/**
-	 * String的字符串转换成unicode的String
-	 * 
-	 * @param String
-	 *            strText 全角字符串
-	 * @return String 每个unicode之间无分隔符
-	 * @throws Exception
-	 */
 	public static String strToUnicode(String strText) throws Exception {
 		char c;
 		StringBuilder str = new StringBuilder();
@@ -430,13 +357,6 @@ public class ByteUtil {
 		return str.toString();
 	}
 
-	/**
-	 * unicode的String转换成String的字符串
-	 * 
-	 * @param String
-	 *            hex 16进制值字符串 （一个unicode为2byte）
-	 * @return String 全角字符串
-	 */
 	public static String unicodeToString(String hex) {
 		int t = hex.length() / 6;
 		StringBuilder str = new StringBuilder();
