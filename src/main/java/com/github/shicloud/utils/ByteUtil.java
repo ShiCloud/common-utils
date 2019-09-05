@@ -4,6 +4,29 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
 public class ByteUtil {
+	
+	
+	public static byte[] toPrimitives(Byte[] oBytes)
+	{
+	    byte[] bytes = new byte[oBytes.length];
+
+	    for(int i = 0; i < oBytes.length; i++) {
+	        bytes[i] = oBytes[i];
+	    }
+
+	    return bytes;
+	}
+	
+	
+	public static Byte[] toObjects(byte[] bytesPrim) {
+	    Byte[] bytes = new Byte[bytesPrim.length];
+
+	    int i = 0;
+	    for (byte b : bytesPrim) bytes[i++] = b; // Autoboxing
+
+	    return bytes;
+	}
+	
 	/**
 	 * 
 	 * 从指定数组的copy一个子数组并返回

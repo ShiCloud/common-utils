@@ -1,9 +1,10 @@
 package com.github.shicloud.bytes;
 
 import java.lang.reflect.Field;
-import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
@@ -21,10 +22,13 @@ import com.github.shicloud.utils.ReflectUtil;
 public class ByteParser {
 
 	private static final Logger logger = LoggerFactory.getLogger(ByteParser.class);
-	
+
 	private static final Map<Class<?>, Map<Integer, Object[]>> objectMapCache = new ConcurrentHashMap<>();
 
-	public static <T> T toObject(byte[] bytes, Class<T> clazz) {
+	private static final int errorIndex = -1;
+	private static final int DEFAULT_END_INDEX = Integer.MAX_VALUE;
+
+	public static <T> T toObject(byte[] bytes, Class<T> clazz, int offset, int endIndex) {
 
 		T obj = null;
 		try {
@@ -36,41 +40,72 @@ public class ByteParser {
 
 		Map<Integer, Object[]> objMap = getObjectMap(obj);
 
-		int index = 0;
+		int index = setObjectValue(bytes, obj, objMap, offset, endIndex);
+		if (index == errorIndex) {
+			return null;
+		}
+		return obj;
+	}
+	
+
+	private static int getFieldLength(Object obj,Map<Integer, Object[]> objMap,Parser parser,String fieldName) 
+			throws Exception {
+		Method dependsOnGetter = null;
+		int dependsOnIndex = parser.dependsOn();
+		if (dependsOnIndex > 0) {
+			Object[] dependsOnParserAndField = objMap.get(dependsOnIndex);
+			Field dependsOnField = (Field) dependsOnParserAndField[1];
+			if (dependsOnField.getType() != Integer.class) {
+				logger.error(fieldName + " dependsOn field type not an integer ");
+				return 0;
+			}
+			String dependsOnFieldName = dependsOnField.getName();
+			dependsOnGetter = ReflectUtil.getGetter(obj, dependsOnFieldName);
+			if(dependsOnGetter != null) {
+				Object invoke = dependsOnGetter.invoke(obj);
+				if(invoke !=null) {
+					return (int) invoke;
+				}
+			}
+			
+			return 0;
+		}
+		
+		return parser.lenght();
+	}
+
+	/**
+	 * @param bytes
+	 * @param obj
+	 * @param objMap
+	 * @param index
+	 * @return currIndex
+	 */
+	private static <T> int setObjectValue(byte[] bytes, T obj, Map<Integer, Object[]> objMap, int index, int endIndex) {
 		for (Object[] parserAndField : objMap.values()) {
 			Parser parser = (Parser) parserAndField[0];
 			Field field = (Field) parserAndField[1];
 			String fieldName = field.getName();
 			Method setter = null;
-			Method dependsOnGetter = null;
 			try {
 				setter = ReflectUtil.getSetter(obj, fieldName);
-				int dependsOnIndex = parser.dependsOn();
-				if (dependsOnIndex > 0) {
-					Object[] dependsOnParserAndField = objMap.get(dependsOnIndex);
-					Field dependsOnField = (Field)dependsOnParserAndField[1];
-					if(dependsOnField.getType() != Integer.class) {
-						logger.error(fieldName + " dependsOn field type not an integer ");
-						return null;
-					}
-					String dependsOnFieldName = dependsOnField.getName();
-					dependsOnGetter = ReflectUtil.getGetter(obj, dependsOnFieldName);
-					
-				}
 			} catch (NoDefinedMethodException e) {
 				logger.error(fieldName + " can not be found ");
-				return null;
+				return errorIndex;
 			}
 
 			try {
-				
-				int fieldLength = dependsOnGetter != null ? (int) dependsOnGetter.invoke(obj) : parser.lenght();
-				if(field.getAnnotation(IgnoreToObject.class)!=null) {
-					index += (fieldLength + parser.offset());
+				int fieldLength = getFieldLength(obj, objMap, parser, fieldName);
+				int currIndex = index;
+				if (field.getAnnotation(IgnoreToObject.class) != null) {
 					continue;
 				}
-				
-				byte[] b = ByteUtil.subBytes(bytes, index + parser.offset(), fieldLength);
+				index += (fieldLength + parser.offset());//判断数组是否够长
+				if (index > bytes.length) {
+					logger.debug(fieldName + " exceed total length ");
+					return errorIndex;
+				}
+				byte[] b = ByteUtil.subBytes(bytes, currIndex + parser.offset(), fieldLength);
 				if (field.getType() == Byte.class) {
 					setter.invoke(obj, Byte.valueOf(b[0]));
 				} else if (field.getType() == Boolean.class) {
@@ -93,96 +128,142 @@ public class ByteParser {
 					setter.invoke(obj, b);
 				} else {
 					logger.error(fieldName + " unsupport data type " + field.getType());
-					return null;
+					return errorIndex;
 				}
-
-				index += (fieldLength + parser.offset());
-			} catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
-				logger.error(fieldName + " parser error ");
-				return null;
+			} catch (Exception e) {
+				logger.error(fieldName + " setObjectValue error ");
+				return errorIndex;
 			}
 		}
-		return obj;
+		return index;
 	}
-	
 	public static byte[] toBytes(Object obj) {
 		Map<Integer, Object[]> objMap = getObjectMap(obj);
 		byte[] bytes = new byte[0];
 		for (Object[] parserAndField : objMap.values()) {
 			Parser parser = (Parser) parserAndField[0];
 			Field field = (Field) parserAndField[1];
-			if(field.getAnnotation(IgnoreToBytes.class)!=null) {
+			String fieldName = field.getName();
+
+			if (field.getAnnotation(IgnoreToBytes.class) != null) {
 				continue;
 			}
-			
+
 			try {
-				Method getter = ReflectUtil.getGetter(obj, field.getName());
-				if(parser.offset()>0) {
+				if (parser.offset() > 0) {
 					bytes = ByteUtil.appendBytes(bytes, new byte[parser.offset()]);
 				}
-				byte[] b = new byte[0];
-				int lenght = parser.lenght();
-				if (field.getType() == Byte.class) {
-					b = ByteUtil.appendBytes(b, new byte[] {(Byte)getter.invoke(obj)});
-				} else if (field.getType() == Boolean.class) {
-					b = ByteUtil.appendBytes(b, new byte[] {ByteUtil.boolTobyte((Boolean)getter.invoke(obj))});
-				} else if (field.getType() == Short.class) {
-					b = ByteUtil.shortToBytes((Short)getter.invoke(obj));
-				} else if (field.getType() == Integer.class) {
-					b = ByteUtil.intToBytes((Integer)getter.invoke(obj));
-				} else if (field.getType() == Long.class) {
-					b = ByteUtil.longToBytes((Long)getter.invoke(obj));
-				} else if (field.getType() == Float.class) {
-					b = ByteUtil.floatToBytes((Float)getter.invoke(obj));
-				} else if (field.getType() == Double.class) {
-					b = ByteUtil.doubleToBytes((Double)getter.invoke(obj));
-				} else if (field.getType() == String.class) {
-					b = ((String)getter.invoke(obj)).getBytes();
-					lenght = b.length;
-				} else if (field.getType() == Date.class) {
-					b = ByteUtil.longToBytes(((Date)getter.invoke(obj)).getTime());
-				} else if (field.getType() == byte[].class) {
-					b = (byte[])getter.invoke(obj);
-				} else {
-					logger.error(field.getName() + " unsupport data type " + field.getType());
-					return null;
-				}
 				
-				if(b.length > lenght) {
-					bytes = ByteUtil.appendBytes(bytes, ByteUtil.cutFrontBytes(b, lenght));
-				}else if (b.length < lenght) {
-					bytes = ByteUtil.appendBytes(bytes, ByteUtil.fillFrontBytes(b, lenght));
-				}else {
-					bytes = ByteUtil.appendBytes(bytes, b);
+				Method getter = ReflectUtil.getGetter(obj, fieldName);
+				int fieldLength = getFieldLength(obj, objMap, parser, fieldName);
+				
+				byte[] b = new byte[0];
+				if (getter.invoke(obj) == null) {
+					bytes = ByteUtil.appendBytes(bytes, new byte[fieldLength]);
+				} else {
+					if (field.getType() == Byte.class) {
+						b = ByteUtil.appendBytes(b, new byte[] { (Byte) getter.invoke(obj) });
+					} else if (field.getType() == Boolean.class) {
+						b = ByteUtil.appendBytes(b, new byte[] { ByteUtil.boolTobyte((Boolean) getter.invoke(obj)) });
+					} else if (field.getType() == Short.class) {
+						b = ByteUtil.shortToBytes((Short) getter.invoke(obj));
+					} else if (field.getType() == Integer.class) {
+						b = ByteUtil.intToBytes((Integer) getter.invoke(obj));
+					} else if (field.getType() == Long.class) {
+						b = ByteUtil.longToBytes((Long) getter.invoke(obj));
+					} else if (field.getType() == Float.class) {
+						b = ByteUtil.floatToBytes((Float) getter.invoke(obj));
+					} else if (field.getType() == Double.class) {
+						b = ByteUtil.doubleToBytes((Double) getter.invoke(obj));
+					} else if (field.getType() == String.class) {
+						b = ((String) getter.invoke(obj)).getBytes();
+						fieldLength = b.length;
+					} else if (field.getType() == Date.class) {
+						b = ByteUtil.longToBytes(((Date) getter.invoke(obj)).getTime());
+					} else if (field.getType() == byte[].class) {
+						b = (byte[]) getter.invoke(obj);
+					} else {
+						logger.error(field.getName() + " unsupport data type " + field.getType());
+						return null;
+					}
+
+					if (b.length > fieldLength) {
+						bytes = ByteUtil.appendBytes(bytes, ByteUtil.cutFrontBytes(b, fieldLength));
+					} else if (b.length < fieldLength) {
+						bytes = ByteUtil.appendBytes(bytes, ByteUtil.fillFrontBytes(b, fieldLength));
+					} else {
+						bytes = ByteUtil.appendBytes(bytes, b);
+					}
 				}
 			} catch (Exception e) {
-				logger.error(field.getName() + " parser error ");
+				logger.error(field.getName() + " toBytes error ");
 				return null;
 			}
 		}
-		
+
 		return bytes;
 	}
-
+	
 	private static <T> Map<Integer, Object[]> getObjectMap(T obj) {
 		Map<Integer, Object[]> objMap = objectMapCache.get(obj.getClass());
-		if(objMap!=null){
-    		return objMap;
-    	}
-		
+		if (objMap != null) {
+			return objMap;
+		}
+
 		objMap = new TreeMap<>();
 		Map<String, Field> fieldMap = ReflectUtil.getFields(obj.getClass());
 		for (Field field : fieldMap.values()) {
 			Parser parser = field.getAnnotation(Parser.class);
-			if (parser == null || parser.index() == 0) {
+			if (parser == null) {
+				logger.error(field.getName() + " not set parser ");
+				return null;
+			}
+			if (parser.index() == 0) {
 				logger.error(field.getName() + " index is zero ");
 				return null;
 			}
 			Object[] parserAndField = new Object[] { parser, field };
 			objMap.put(parser.index(), parserAndField);
 		}
-		
-		objectMapCache.put(obj.getClass(),objMap);
+
+		objectMapCache.put(obj.getClass(), objMap);
 		return objMap;
 	}
+
+	public static <T> T toObject(byte[] bytes, Class<T> clazz) {
+		return toObject(bytes, clazz, 0, DEFAULT_END_INDEX);
+	}
+
+	private static <T> T createObject(Class<T> clazz) {
+		T obj = null;
+		try {
+			obj = clazz.newInstance();
+		} catch (InstantiationException | IllegalAccessException e) {
+			logger.error(clazz.getName() + " InstantiationException ");
+			return null;
+		}
+		return obj;
+	}
+
+	public static <T> List<T> toObjectList(byte[] bytes, Class<T> clazz, int offset, int endIndex) {
+		List<T> list = new ArrayList<T>();
+		int index = offset;
+		Map<Integer, Object[]> objMap = getObjectMap(createObject(clazz));
+
+		while (index < bytes.length && index < endIndex) {
+			T obj = createObject(clazz);
+			index = setObjectValue(bytes, obj, objMap, index, endIndex);
+			if (index == errorIndex) {
+				return list;
+			}
+			list.add(obj);
+		}
+		return list;
+	}
+
+	public static <T> List<T> toObjectList(byte[] bytes, Class<T> clazz) {
+		return toObjectList(bytes, clazz, 0, DEFAULT_END_INDEX);
+	}
+
+
 }

@@ -2,7 +2,6 @@ package com.github.shicloud.bytes;
 
 import java.util.Date;
 
-import com.github.shicloud.bytes.annotation.IgnoreToObject;
 import com.github.shicloud.bytes.annotation.Parser;
 
 public class User {
@@ -20,14 +19,14 @@ public class User {
 	private Double salary;
 	
 	@Parser(index = 5, lenght = 2)
+	//@IgnoreToBytes
 	private Integer loginLength;
 	
 	@Parser(index = 6, dependsOn = 5)
-	private String login;
+	private byte[] login;
 	
 	@Parser(index = 7, lenght = 8)
-	//@IgnoreToBytes
-	@IgnoreToObject
+	//@IgnoreToObject
 	private Date createTime;
 	
 	@Parser(index = 8, lenght = 1)
@@ -35,9 +34,6 @@ public class User {
 	
 	@Parser(index = 9, lenght = 1)
 	private Byte isDel;
-	
-	@Parser(index = 10, lenght = 10)
-	private byte[] descrption;
 
 	public Long getId() {
 		return id;
@@ -79,11 +75,11 @@ public class User {
 		this.loginLength = loginLength;
 	}
 
-	public String getLogin() {
+	public byte[] getLogin() {
 		return login;
 	}
 
-	public void setLogin(String login) {
+	public void setLogin(byte[] login) {
 		this.login = login;
 	}
 
@@ -109,14 +105,6 @@ public class User {
 
 	public void setIsDel(Byte isDel) {
 		this.isDel = isDel;
-	}
-
-	public byte[] getDescrption() {
-		return descrption;
-	}
-
-	public void setDescrption(byte[] descrption) {
-		this.descrption = descrption;
 	}
 
 }
