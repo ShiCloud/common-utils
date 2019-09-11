@@ -4,6 +4,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -14,7 +15,9 @@ import org.slf4j.LoggerFactory;
 
 import com.github.shicloud.bytes.annotation.IgnoreToBytes;
 import com.github.shicloud.bytes.annotation.IgnoreToObject;
+import com.github.shicloud.bytes.annotation.LittleEnd;
 import com.github.shicloud.bytes.annotation.Parser;
+import com.github.shicloud.bytes.annotation.TargetModel;
 import com.github.shicloud.exception.NoDefinedMethodException;
 import com.github.shicloud.utils.ByteUtil;
 import com.github.shicloud.utils.ReflectUtil;
@@ -24,9 +27,9 @@ public class ByteParser {
 	private static final Logger logger = LoggerFactory.getLogger(ByteParser.class);
 
 	private static final Map<Class<?>, Map<Integer, Object[]>> objectMapCache = new ConcurrentHashMap<>();
+	private static final Map<String, Class<?>> classCache = new HashMap<>();
 
 	private static final int errorIndex = -1;
-	private static final int DEFAULT_END_INDEX = Integer.MAX_VALUE;
 
 	public static <T> T toObject(byte[] bytes, Class<T> clazz, int offset, int endIndex) {
 
@@ -105,28 +108,76 @@ public class ByteParser {
 					logger.debug(fieldName + " exceed total length ");
 					return errorIndex;
 				}
-				byte[] b = ByteUtil.subBytes(bytes, currIndex + parser.offset(), fieldLength);
+				if(fieldLength == 0) {
+					continue;
+				}
+				
+				byte[] b = null;
+				
+				if (field.getType() == List.class && parser.dependsOn() > 0) {
+					b = ByteUtil.subBytes(bytes, currIndex, fieldLength + parser.offset());
+				}else {
+					b = ByteUtil.subBytes(bytes, currIndex + parser.offset(), fieldLength);
+				}
+				
+				
+				LittleEnd littleEnd = field.getAnnotation(LittleEnd.class);
+				boolean isLittleEnd = (littleEnd!=null && littleEnd.value());
+				
 				if (field.getType() == Byte.class) {
 					setter.invoke(obj, Byte.valueOf(b[0]));
 				} else if (field.getType() == Boolean.class) {
 					setter.invoke(obj, ByteUtil.byteToBool(b[0]));
 				} else if (field.getType() == Short.class) {
-					setter.invoke(obj, ByteUtil.byteToshort(b));
+					if(isLittleEnd) {
+						setter.invoke(obj, ByteUtil.bytesLEToshort(b));
+					}else {
+						setter.invoke(obj, ByteUtil.bytesToshort(b));
+					}
 				} else if (field.getType() == Integer.class) {
-					setter.invoke(obj, ByteUtil.fillFrontBytesToInt(b, 0, fieldLength));
+					if(isLittleEnd) {
+						setter.invoke(obj, ByteUtil.bytesLEToInt(ByteUtil.fillEndBytes(b, fieldLength)));
+					}else {
+						setter.invoke(obj, ByteUtil.fillFrontBytesToInt(b, 0, fieldLength));
+					}
 				} else if (field.getType() == Long.class) {
-					setter.invoke(obj, ByteUtil.fillFrontBytesToLong(b, 0, fieldLength));
+					if(isLittleEnd) {
+						setter.invoke(obj, ByteUtil.bytesLEToLong(ByteUtil.fillEndBytes(b, fieldLength)));
+					}else {
+						setter.invoke(obj, ByteUtil.fillFrontBytesToLong(b, 0, fieldLength));
+					}
 				} else if (field.getType() == Float.class) {
-					setter.invoke(obj, ByteUtil.fillFrontBytesToFloat(b, 0, fieldLength));
+					if(isLittleEnd) {
+						setter.invoke(obj, ByteUtil.bytesLEToFloat(ByteUtil.fillEndBytes(b, fieldLength)));
+					}else {
+						setter.invoke(obj, ByteUtil.fillFrontBytesToFloat(b, 0, fieldLength));
+					}
 				} else if (field.getType() == Double.class) {
-					setter.invoke(obj, ByteUtil.fillFrontBytesToDouble(b, 0, fieldLength));
+					if(isLittleEnd) {
+						setter.invoke(obj, ByteUtil.bytesLEToDouble(ByteUtil.fillEndBytes(b, fieldLength)));
+					}else {
+						setter.invoke(obj, ByteUtil.fillFrontBytesToDouble(b, 0, fieldLength));
+					}
 				} else if (field.getType() == String.class) {
 					setter.invoke(obj, ByteUtil.byteToStr(b));
 				} else if (field.getType() == Date.class) {
-					setter.invoke(obj, new Date(ByteUtil.bytesToLong(b)));
+					if(isLittleEnd) {
+						setter.invoke(obj, new Date(ByteUtil.bytesLEToLong(b)/parser.divide()));
+					}else {
+						setter.invoke(obj, new Date(ByteUtil.bytesToLong(b)/parser.divide()));
+					}
 				} else if (field.getType() == byte[].class) {
 					setter.invoke(obj, b);
-				} else {
+				} else if (field.getType() == List.class) {
+					TargetModel target = field.getAnnotation(TargetModel.class);
+					Class<?> jvmClasses = getJVMClasses(target.value());
+					if(jvmClasses == null) {
+						logger.error("unknown class " + target.value());
+						return errorIndex;
+					}
+					List<?> objectList = toObjectList(b,jvmClasses);
+					setter.invoke(obj, objectList);
+				}  else {
 					logger.error(fieldName + " unsupport data type " + field.getType());
 					return errorIndex;
 				}
@@ -137,6 +188,18 @@ public class ByteParser {
 		}
 		return index;
 	}
+	
+	public static Class<?> getJVMClasses(String name) throws ClassNotFoundException{
+		Class<?> c = classCache.get(name);
+		if(c!=null) {
+			return c;
+		}
+		c = Class.forName(name);
+		classCache.put(name, c);
+		return c;
+	}
+	
+	
 	public static byte[] toBytes(Object obj) {
 		Map<Integer, Object[]> objMap = getObjectMap(obj);
 		byte[] bytes = new byte[0];
@@ -161,28 +224,59 @@ public class ByteParser {
 				if (getter.invoke(obj) == null) {
 					bytes = ByteUtil.appendBytes(bytes, new byte[fieldLength]);
 				} else {
+					LittleEnd littleEnd = field.getAnnotation(LittleEnd.class);
+					boolean isLittleEnd = (littleEnd!=null && littleEnd.value());
 					if (field.getType() == Byte.class) {
 						b = ByteUtil.appendBytes(b, new byte[] { (Byte) getter.invoke(obj) });
 					} else if (field.getType() == Boolean.class) {
 						b = ByteUtil.appendBytes(b, new byte[] { ByteUtil.boolTobyte((Boolean) getter.invoke(obj)) });
 					} else if (field.getType() == Short.class) {
-						b = ByteUtil.shortToBytes((Short) getter.invoke(obj));
+						if(isLittleEnd) {
+							b = ByteUtil.shortToBytesLE((Short) getter.invoke(obj));
+						}else {
+							b = ByteUtil.shortToBytes((Short) getter.invoke(obj));
+						}
 					} else if (field.getType() == Integer.class) {
-						b = ByteUtil.intToBytes((Integer) getter.invoke(obj));
+						if(isLittleEnd) {
+							b = ByteUtil.intToBytesLE((Integer) getter.invoke(obj));
+						}else {
+							b = ByteUtil.intToBytes((Integer) getter.invoke(obj));
+						}
 					} else if (field.getType() == Long.class) {
-						b = ByteUtil.longToBytes((Long) getter.invoke(obj));
+						if(isLittleEnd) {
+							b = ByteUtil.longToBytesLE((Long) getter.invoke(obj));
+						}else {
+							b = ByteUtil.longToBytes((Long) getter.invoke(obj));
+						}
 					} else if (field.getType() == Float.class) {
-						b = ByteUtil.floatToBytes((Float) getter.invoke(obj));
+						if(isLittleEnd) {
+							b = ByteUtil.floatToBytesLE((Float) getter.invoke(obj));
+						}else {
+							b = ByteUtil.floatToBytes((Float) getter.invoke(obj));
+						}
 					} else if (field.getType() == Double.class) {
-						b = ByteUtil.doubleToBytes((Double) getter.invoke(obj));
+						if(isLittleEnd) {
+							b = ByteUtil.doubleToBytesLE((Double) getter.invoke(obj));
+						}else {
+							b = ByteUtil.doubleToBytes((Double) getter.invoke(obj));
+						}
 					} else if (field.getType() == String.class) {
 						b = ((String) getter.invoke(obj)).getBytes();
 						fieldLength = b.length;
 					} else if (field.getType() == Date.class) {
-						b = ByteUtil.longToBytes(((Date) getter.invoke(obj)).getTime());
+						if(isLittleEnd) {
+							b = ByteUtil.longToBytesLE(((Date) getter.invoke(obj)).getTime());
+						}else {
+							b = ByteUtil.longToBytes(((Date) getter.invoke(obj)).getTime());
+						}
 					} else if (field.getType() == byte[].class) {
 						b = (byte[]) getter.invoke(obj);
-					} else {
+					} else if (field.getType() == List.class) {
+						List<?> objectList = (List<?>) getter.invoke(obj);
+						for (Object object : objectList) {
+							b = ByteUtil.appendBytes(b, toBytes(object));
+						}
+					}  else {
 						logger.error(field.getName() + " unsupport data type " + field.getType());
 						return null;
 					}
@@ -231,7 +325,7 @@ public class ByteParser {
 	}
 
 	public static <T> T toObject(byte[] bytes, Class<T> clazz) {
-		return toObject(bytes, clazz, 0, DEFAULT_END_INDEX);
+		return toObject(bytes, clazz, 0, bytes.length);
 	}
 
 	private static <T> T createObject(Class<T> clazz) {
@@ -262,7 +356,7 @@ public class ByteParser {
 	}
 
 	public static <T> List<T> toObjectList(byte[] bytes, Class<T> clazz) {
-		return toObjectList(bytes, clazz, 0, DEFAULT_END_INDEX);
+		return toObjectList(bytes, clazz, 0, bytes.length);
 	}
 
 

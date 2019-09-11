@@ -32,4 +32,8 @@ public @interface Parser {
      * 解析字节的偏移量
      */
     int offset() default 0;
+    /**
+     * 解析字节的偏移量
+     */
+    int divide() default 1;
 }

@@ -83,6 +83,14 @@ public class ByteUtil {
 		return b;
 	}
 	
+	public static byte[] fillEndBytes(byte[] src, int size) {
+		byte[] b = new byte[size];
+		for (int i = 0; i < (size > src.length?src.length:size); i++){
+			b[i] = src[i];
+		}
+		return b;
+	}
+	
 	public static int fillFrontBytesToInt(byte[] src, int begin, int count) {
 		return ByteUtil.bytesToInt(ByteUtil.fillFrontBytes(ByteUtil.subBytes(src, begin, count),4));
 	}
@@ -195,9 +203,21 @@ public class ByteUtil {
 		return new byte[]{high,low};
 	}
 	
-	public static short byteToshort(byte[] bytes){
+	public static byte[] shortToBytesLE(short x) {
+		byte high = (byte)(0x00FF & x);
+		byte low = (byte)(0x00FF & (x>>8));
+		return new byte[]{high,low};
+	}
+	
+	public static short bytesToshort(byte[] bytes){
 		byte high = bytes[0];
 		byte low = bytes[1];
+		return (short)(((high & 0x00FF) << 8) | (0x00FF & low));
+	}
+	
+	public static short bytesLEToshort(byte[] bytes){
+		byte high = bytes[1];
+		byte low = bytes[0];
 		return (short)(((high & 0x00FF) << 8) | (0x00FF & low));
 	}
 
@@ -256,8 +276,24 @@ public class ByteUtil {
 		return buffer.getFloat();
 	}
 	
+	public static float bytesLEToFloat(byte[] bytes) {
+		ByteBuffer buffer = ByteBuffer.allocate(4);
+		buffer.order(ByteOrder.LITTLE_ENDIAN);
+		buffer.put(bytes, 0, bytes.length);
+		buffer.flip();// need flip
+		return buffer.getFloat();
+	}
+	
 	public static double bytesToDouble(byte[] bytes) {
 		ByteBuffer buffer = ByteBuffer.allocate(8);
+		buffer.put(bytes, 0, bytes.length);
+		buffer.flip();// need flip
+		return buffer.getDouble();
+	}
+	
+	public static double bytesLEToDouble(byte[] bytes) {
+		ByteBuffer buffer = ByteBuffer.allocate(8);
+		buffer.order(ByteOrder.LITTLE_ENDIAN);
 		buffer.put(bytes, 0, bytes.length);
 		buffer.flip();// need flip
 		return buffer.getDouble();
@@ -269,8 +305,22 @@ public class ByteUtil {
 		return buffer.array();
 	}
 	
+	public static byte[] floatToBytesLE(float f) {
+		ByteBuffer buffer = ByteBuffer.allocate(4);
+		buffer.order(ByteOrder.LITTLE_ENDIAN);
+		buffer.putFloat(0,f);
+		return buffer.array();
+	}
+	
 	public static byte[] doubleToBytes(double d) {
 		ByteBuffer buffer = ByteBuffer.allocate(8);
+		buffer.putDouble(0,d);
+		return buffer.array();
+	}
+	
+	public static byte[] doubleToBytesLE(double d) {
+		ByteBuffer buffer = ByteBuffer.allocate(8);
+		buffer.order(ByteOrder.LITTLE_ENDIAN);
 		buffer.putDouble(0,d);
 		return buffer.array();
 	}
